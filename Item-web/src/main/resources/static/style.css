@@ -1,0 +1,277 @@
+/* =====================================================================
+   所持品管理・見た目(CSS)
+   ------------------------------------------------------------------
+   背景は真っ白。文字と主ボタンは墨色(ほぼ黒)で、丸みのあるボタンを基調にしている。
+   色や丸みの基準値は :root にまとめてあるので、雰囲気を変えたいときは
+   まずここの値だけ触れば全体に反映される。
+   ===================================================================== */
+
+:root {
+  /* ---- ベースの色 ---- */
+  --paper: #FFFFFF;        /* 背景(真っ白) */
+  --surface: #FFFFFF;      /* カード・表の背景 */
+  --ink: #111111;          /* 本文の文字色・主ボタン */
+  --ink-soft: #6B7280;     /* 補足文字・ラベル */
+  --line: #EBEBEB;         /* 罫線・区切り線 */
+  --hover: #F5F5F6;        /* ホバー時のうすいグレー */
+
+  /* ---- 状態を伝える色 ---- */
+  --warn: #C27A12;         /* 保証期限が近い */
+  --warn-bg: #FFF8EC;
+  --danger: #C2362B;       /* 保証切れ・削除 */
+  --danger-bg: #FDF0EE;
+  --disposed: #9AA0A6;     /* 手放し済み */
+  --disposed-bg: #F7F7F8;
+  --ok: #2E7D4F;
+
+  /* ---- 形・影・書体 ---- */
+  --radius-s: 12px;        /* 入力欄など */
+  --radius-m: 18px;        /* カード・表 */
+  --radius-pill: 999px;    /* ボタン(完全な丸み) */
+  --shadow-btn: 0 1px 2px rgba(17,17,17,0.12), 0 4px 10px rgba(17,17,17,0.12);
+  --shadow-card: 0 12px 40px rgba(17,17,17,0.16);
+  --font-body: "Inter", "Noto Sans JP", system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+}
+
+/* 「動きを減らす」設定をしている人には、演出のアニメーションを止める */
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--font-body); line-height: 1.55; font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+/* キーボード操作でフォーカスが当たった要素は、はっきり分かるようにする(アクセシビリティ) */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ---------------------------------------------------------------------
+   ヘッダー
+   --------------------------------------------------------------------- */
+.app-header { background: var(--paper); border-bottom: 1px solid var(--line); }
+.header-inner { display: flex; align-items: center; gap: 10px; padding: 18px 24px; }
+.logo-mark { width: 26px; height: 26px; color: var(--ink); flex-shrink: 0; }
+.app-title { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+
+main.wrap { padding-top: 28px; padding-bottom: 56px; }
+
+/* ---------------------------------------------------------------------
+   まとめ(数字を大きく見せる、余白たっぷりのカード)
+   --------------------------------------------------------------------- */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.stat {
+  border: 1px solid var(--line); border-radius: var(--radius-m);
+  padding: 16px 20px; background: var(--surface);
+}
+.stat-label { display: block; font-size: 0.78rem; color: var(--ink-soft); font-weight: 500; margin-bottom: 6px; }
+.stat-value { display: flex; align-items: baseline; gap: 4px; }
+.stat-value strong { font-size: 1.9rem; line-height: 1; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat-value span { font-size: 0.85rem; color: var(--ink-soft); }
+.stat-soon .stat-value strong { color: var(--warn); }
+
+/* ---------------------------------------------------------------------
+   ツールバー(検索・絞り込み・追加ボタン)
+   --------------------------------------------------------------------- */
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.toolbar-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.toolbar .checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
+.toolbar .checkbox input { accent-color: var(--ink); width: 15px; height: 15px; }
+
+.search-box {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--hover); border: 1px solid transparent; border-radius: var(--radius-pill);
+  padding: 9px 16px; min-width: 300px; transition: background 0.12s ease, border-color 0.12s ease;
+}
+.search-box:focus-within { background: #fff; border-color: var(--ink); }
+.search-box svg { width: 16px; height: 16px; color: var(--ink-soft); flex-shrink: 0; }
+.search-box input { border: 0; outline: 0; background: transparent; font: inherit; width: 100%; color: var(--ink); }
+
+/* 絞り込みの選択欄も、ボタンと同じ丸み */
+.toolbar select {
+  padding: 9px 36px 9px 16px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  font: inherit; font-size: 0.9rem; background-color: #fff; color: var(--ink); cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 14px;
+}
+.toolbar select:hover { background-color: var(--hover); }
+
+/* ---------------------------------------------------------------------
+   ボタン(完全な丸み・やわらかい影のピル型)
+   --------------------------------------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid transparent; border-radius: var(--radius-pill); cursor: pointer;
+  padding: 11px 22px; font: inherit; font-weight: 600; font-size: 0.9rem; letter-spacing: 0.01em;
+  text-decoration: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.btn svg { width: 16px; height: 16px; }
+.btn-primary { background: var(--ink); color: #fff; box-shadow: var(--shadow-btn); }
+.btn-primary:hover { background: #2A2A2A; transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0) scale(0.98); box-shadow: 0 1px 2px rgba(17,17,17,0.2); }
+.btn.sub { background: #fff; color: var(--ink); border-color: #DADADA; }
+.btn.sub:hover { background: var(--hover); border-color: #C8C8C8; }
+.btn.sub:active { transform: scale(0.98); }
+
+/* 行の中の小さな丸ボタン(編集・手放した・削除) */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid transparent;
+  background: transparent; color: var(--ink-soft); cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.icon-btn svg { width: 17px; height: 17px; }
+.icon-btn:hover { background: var(--hover); color: var(--ink); }
+.row-actions { display: flex; gap: 2px; }
+.row-actions .icon-btn.dispose:hover { color: var(--ok); background: #EEF7F1; }
+.row-actions .icon-btn.restore:hover { color: var(--warn); background: var(--warn-bg); }
+.row-actions .icon-btn.delete:hover { color: var(--danger); background: var(--danger-bg); }
+
+/* ---------------------------------------------------------------------
+   一覧表(影は付けず、細い罫線と余白で見せる)
+   --------------------------------------------------------------------- */
+.table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m); overflow: hidden; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 14px 16px; text-align: left; vertical-align: middle; }
+thead th {
+  font-size: 0.74rem; color: var(--ink-soft); white-space: nowrap; font-weight: 600;
+  letter-spacing: 0.04em; user-select: none; border-bottom: 1px solid var(--line);
+}
+/* 並び替えできる列見出し。矢印は現在の並び順(aria-sort)に応じてCSSだけで出す */
+th[data-sort] { cursor: pointer; }
+th[data-sort]:hover { color: var(--ink); }
+th[data-sort]::after { content: ""; margin-left: 4px; }
+th[aria-sort="ascending"]::after { content: "↑"; color: var(--ink); }
+th[aria-sort="descending"]::after { content: "↓"; color: var(--ink); }
+th[aria-sort="ascending"], th[aria-sort="descending"] { color: var(--ink); }
+
+tbody tr { border-top: 1px solid var(--line); transition: background 0.1s ease; }
+tbody tr:first-child { border-top: 0; }
+tbody tr:hover { background: #FAFAFA; }
+td.name { font-weight: 600; }
+td.date { white-space: nowrap; }
+td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.ops { white-space: nowrap; }
+td.note { color: var(--ink-soft); font-size: 0.88rem; max-width: 220px; }
+td .sub-line { display: block; font-size: 0.75rem; color: var(--ink-soft); }
+
+/* 保証が近い・保証切れ・手放し済みは、左端の色の線とうすい背景で伝える */
+tbody tr.soon { background: var(--warn-bg); }
+tbody tr.expired { background: var(--danger-bg); }
+tbody tr.disposed { background: var(--disposed-bg); color: var(--disposed); }
+tbody tr.soon td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+tbody tr.expired td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+tbody tr.disposed td:first-child { box-shadow: inset 3px 0 0 #D5D8DB; }
+tbody tr.soon .sub-line { color: var(--warn); font-weight: 600; }
+tbody tr.expired .sub-line { color: var(--danger); font-weight: 600; }
+
+/* カテゴリを表す色付きラベル(バッジ)。色は script.js が名前から決める */
+.category-badge {
+  display: inline-block; padding: 3px 11px; border-radius: var(--radius-pill);
+  font-size: 0.76rem; font-weight: 600; white-space: nowrap;
+}
+
+/* 何も登録されていないときの案内 */
+.empty { text-align: center; padding: 64px 24px; color: var(--ink-soft); }
+.empty svg { width: 44px; height: 44px; margin-bottom: 12px; opacity: 0.5; }
+.empty p { margin: 0 0 16px; }
+
+/* ---------------------------------------------------------------------
+   結果メッセージ(トースト)。画面右上に軽く浮かせて表示する
+   --------------------------------------------------------------------- */
+.toast {
+  position: fixed; top: 20px; right: 20px; z-index: 50;
+  background: var(--ink); color: #fff; padding: 12px 20px; border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-btn); font-size: 0.88rem; max-width: 340px;
+  animation: toast-in 0.18s ease-out;
+}
+.toast.error { background: var(--danger); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* ---------------------------------------------------------------------
+   追加・編集フォーム(モーダル)
+   --------------------------------------------------------------------- */
+.overlay {
+  position: fixed; inset: 0; background: rgba(17,17,17,0.28); backdrop-filter: blur(3px);
+  align-items: flex-start; justify-content: center;
+  padding: 48px 16px; overflow-y: auto; z-index: 40;
+  /* display を直接 .overlay に書くと、hidden属性より強く効いてしまい、
+     JavaScriptで hidden = true にしても画面から消えなくなる。
+     そのため「hidden が付いていないときだけ flex にする」という書き方にしている。 */
+  display: none;
+}
+.overlay:not([hidden]) { display: flex; }
+.card { background: var(--surface); border-radius: 24px; box-shadow: var(--shadow-card); }
+.form { max-width: 520px; width: 100%; padding: 24px 28px 28px; animation: form-in 0.16s ease-out; }
+@keyframes form-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.form-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.form-head h2 { margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: -0.01em; }
+
+.field { display: block; margin-bottom: 14px; }
+.field span { display: block; font-size: 0.78rem; color: var(--ink-soft); font-weight: 500; margin-bottom: 5px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+input[type=text], input[type=date], input[type=number], textarea, .form select {
+  width: 100%; padding: 10px 14px; border: 1px solid #DEDEDE; border-radius: var(--radius-s);
+  font: inherit; background: #fff; color: var(--ink);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+input[type=text]:focus, input[type=date]:focus, input[type=number]:focus, textarea:focus, .form select:focus {
+  outline: 0; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(17,17,17,0.08);
+}
+textarea { resize: vertical; }
+input[type=text], input[type=date], input[type=number], .form select { height: 44px; }
+.form select {
+  appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 14px;
+}
+
+.actions { display: flex; gap: 10px; margin-top: 8px; }
+.actions .btn-primary { flex: 1; }
+
+.error {
+  background: var(--danger-bg); border: 1px solid #F3CFCA; color: var(--danger);
+  padding: 10px 16px; border-radius: var(--radius-s); margin-bottom: 14px; font-size: 0.86rem;
+}
+.error ul { margin: 0; padding-left: 18px; }
+
+/* ---------------------------------------------------------------------
+   スマホなど狭い画面: 表を「見出し:値」が並ぶカード形式に組み替える。
+   横スクロールさせず、1件=1枚のカードとして縦に並べる。
+   --------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .wrap, .header-inner { padding-left: 16px; padding-right: 16px; }
+  .stat-row { grid-template-columns: 1fr 1fr; }
+  .stat-row .stat:first-child { grid-column: 1 / -1; }
+  .search-box { min-width: 0; width: 100%; }
+  .toolbar-controls { width: 100%; }
+  .field-row { grid-template-columns: 1fr; gap: 0; }
+
+  .table-wrap { border: 0; border-radius: 0; overflow: visible; }
+  table, thead, tbody, tr, th, td { display: block; width: 100%; }
+  thead { display: none; } /* 見出し行は隠し、各セルの前に data-label を出す */
+  tbody tr { border: 1px solid var(--line); border-radius: var(--radius-m); margin: 0 0 12px; overflow: hidden; }
+  tbody tr:first-child { border-top: 1px solid var(--line); }
+  td {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    border-top: 1px solid var(--line); padding: 10px 16px; text-align: right;
+  }
+  td:first-child { border-top: 0; }
+  td::before { content: attr(data-label); font-size: 0.76rem; color: var(--ink-soft); font-weight: 600; flex-shrink: 0; text-align: left; }
+  td.name { justify-content: flex-start; font-size: 1rem; }
+  td.name::before { content: none; }
+  td.ops { justify-content: flex-end; }
+  td.ops::before { content: none; }
+  td.note { max-width: none; }
+}
