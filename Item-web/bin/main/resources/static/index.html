@@ -73,6 +73,12 @@
       </button>
     </div>
 
+    <!-- 保管場所のタブ(「すべて」「玄関」「廊下」…)。中身は script.js が作る -->
+    <div class="tabs-row">
+      <div id="locationTabs" class="tabs" role="tablist" aria-label="保管場所"></div>
+      <button type="button" id="openOrderButton" class="btn sub btn-small">場所の並び替え</button>
+    </div>
+
     <!-- 一覧表(中身の行は script.js が組み立てる)。列見出しをクリックすると並び替えできる -->
     <div class="table-wrap">
       <table>
@@ -166,6 +172,24 @@
   </div>
 
   <!-- 動きの本体はすべて script.js に書いている -->
+  
+    <div id="orderOverlay" class="overlay" hidden>
+    <div class="card form" role="dialog" aria-modal="true" aria-labelledby="orderTitle">
+      <div class="form-head">
+        <h2 id="orderTitle">場所の並び替え</h2>
+        <button type="button" id="orderCloseX" class="icon-btn" aria-label="閉じる">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="19" y1="5" x2="5" y2="19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <p class="hint">玄関に近い場所が上になるように並べてください。引っ越したときは、ここを直すだけで所持品の並びも変わります。</p>
+      <ul id="orderList" class="order-list"></ul>
+      <div class="actions">
+        <button type="button" id="orderSaveButton" class="btn btn-primary">保存</button>
+        <button type="button" id="orderCancelButton" class="btn sub">キャンセル</button>
+      </div>
+    </div>
+  </div>
+  
   <script src="script.js"></script>
 </body>
 </html>

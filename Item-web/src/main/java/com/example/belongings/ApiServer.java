@@ -74,6 +74,10 @@ public class ApiServer {
         createItem(ex);
       } else if (path.equals("/api/meta") && method.equals("GET")) {
         sendMeta(ex);
+      } else if (path.equals("/api/locations") && method.equals("GET")) {
+        sendLocations(ex);
+      } else if (path.equals("/api/locations") && method.equals("PUT")) {
+        saveLocations(ex);
       } else if (path.startsWith("/api/items/")) {
         handleItemPath(ex, path, method);
       } else if (path.startsWith("/api/")) {
@@ -202,6 +206,44 @@ public class ApiServer {
         n > 0 ? "{\"ok\":true}" : "{\"error\":" + Json.str("対象が見つかりませんでした") + "}");
   }
 
+  /**
+   * 保管場所を「玄関に近い順」に並べて返す。
+   * 保存済みの並び順 → 設定ファイルの候補 → 所持品で使われている場所、の順に重複なしでまとめる
+   * (新しく入力された場所は、いったん末尾に付く)。
+   */
+  private List<String> orderedLocations() throws SQLException {
+    java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>(repo.findLocationOrder());
+    set.addAll(cfg.locationPresets);
+    set.addAll(repo.distinctLocations());
+    return new java.util.ArrayList<>(set);
+  }
+
+  /** GET /api/locations : 並び順つきの保管場所一覧 */
+  private void sendLocations(HttpExchange ex) throws SQLException, IOException {
+    StringBuilder b = new StringBuilder("{\"locations\":[");
+    List<String> list = orderedLocations();
+    for (int i = 0; i < list.size(); i++) {
+      if (i > 0)
+        b.append(",");
+      b.append(Json.str(list.get(i)));
+    }
+    b.append("]}");
+    sendJson(ex, 200, b.toString());
+  }
+
+  /** PUT /api/locations : 並び順を保存。{"order":"玄関\n廊下\nリビング"} のように改行区切りで受け取る */
+  private void saveLocations(HttpExchange ex) throws SQLException, IOException {
+    Map<String, String> body = Json.parseFlatObject(readBody(ex));
+    java.util.LinkedHashSet<String> names = new java.util.LinkedHashSet<>();
+    for (String s : trimOrEmpty(body.get("order")).split("\n")) {
+      if (!s.trim().isEmpty()) {
+        names.add(s.trim());
+      }
+    }
+    repo.saveLocationOrder(new java.util.ArrayList<>(names));
+    sendJson(ex, 200, "{\"ok\":true}");
+  }
+
   /** GET /api/meta : カテゴリ一覧、購入店舗の候補、警告日数を返す(画面の初期化に使う) */
   private void sendMeta(HttpExchange ex) throws SQLException, IOException {
     StringBuilder b = new StringBuilder("{");
@@ -226,12 +268,18 @@ public class ApiServer {
       b.append(Json.str(stores.get(i)));
     }
     b.append("],\"locations\":[");
-    List<String> locations = new java.util.ArrayList<>(cfg.locationPresets);
-    for (String s : repo.distinctLocations()) {
-      if (!locations.contains(s)) {
-        locations.add(s);
-      }
-    }
+
+    // 削除
+    // List<String> locations = new java.util.ArrayList<>(cfg.locationPresets);
+    // for (String s : repo.distinctLocations()) {
+    // if (!locations.contains(s)) {
+    // locations.add(s);
+    // }
+    // }
+
+    // 追加
+    List<String> locations = orderedLocations();
+
     for (int i = 0; i < locations.size(); i++) {
       if (i > 0)
         b.append(",");
@@ -267,6 +315,8 @@ public class ApiServer {
     // 購入日・保証期限は任意(未入力なら null のまま保存する)
     LocalDate purchase = parseOptionalDate("購入日", f.get("purchase"), r.errors);
     LocalDate warranty = parseOptionalDate("保証期限", f.get("warranty"), r.errors);
+    LocalDate disposal = parseOptionalDate("手放した日", f.get("disposal"), r.errors); // ←
+                                                                                  // 「使い切った日」を編集するために、後に追加
 
     int price = 0;
     String priceText = trimOrEmpty(f.get("price"));
@@ -282,7 +332,7 @@ public class ApiServer {
     }
 
     r.item = new Item(id, name, category, trimOrEmpty(f.get("location")), purchase, price,
-        trimOrEmpty(f.get("store")), warranty, trimOrEmpty(f.get("note")), null);
+        trimOrEmpty(f.get("store")), warranty, trimOrEmpty(f.get("note")), disposal);
     return r;
   }
 
@@ -324,6 +374,8 @@ public class ApiServer {
         .append(it.getWarrantyDate() == null ? "null" : Json.str(it.getWarrantyDate().toString()));
     b.append(",\"note\":").append(Json.str(it.getNote()));
     b.append(",\"disposed\":").append(it.isDisposed());
+    b.append(",\"disposal\":")
+        .append(it.getDisposalDate() == null ? "null" : Json.str(it.getDisposalDate().toString()));// ←「使い切った日」を編集するために、後に追加
     b.append(",\"daysUntilWarranty\":").append(days == null ? "null" : days);
     b.append("}");
     return b.toString();

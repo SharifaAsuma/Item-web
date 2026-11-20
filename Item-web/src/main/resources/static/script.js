@@ -15,7 +15,17 @@
 let currentCategory = "";            // 選択中のカテゴリ("" = すべて)
 let currentIncludeDisposed = false;  // 手放した所持品も表示するか
 let currentSearch = "";              // 検索欄に入力されている文字列
-let currentSort = { key: "recent", dir: "desc" }; // 並び替えの列と向き(最初は新しく登録した順)
+
+//削除
+//let currentSort = { key: "recent", dir: "desc" }; // 並び替えの列と向き(最初は新しく登録した順)
+
+//新たに追加
+let currentSort = { key: "location", dir: "asc" }; // 最初は「玄関に近い順」
+let currentLocation = "";            // 選択中の保管場所タブ("" = すべて)
+let locationOrder = [];              // 保管場所の並び順(玄関に近い順)。/api/meta から取得
+let orderDraft = [];                 // 並び替えモーダルで編集中の並び
+const NO_LOCATION = "(未設定)";      // 保管場所が空の所持品のタブ名
+
 let lastItems = [];                  // 直近にサーバーから取得した一覧
 let WARNING_DAYS = 30;               // 保証期限の警告日数(/api/meta から取得して上書きする)
 
@@ -53,6 +63,15 @@ const el = {
 	fieldWarranty: document.getElementById("fieldWarranty"),
 	fieldDisposal: document.getElementById("fieldDisposal"),// ← 「使い切った日」を編集するために、後に追加
 	fieldNote: document.getElementById("fieldNote"),
+
+	//新たに追加
+	locationTabs: document.getElementById("locationTabs"),
+	openOrderButton: document.getElementById("openOrderButton"),
+	orderOverlay: document.getElementById("orderOverlay"),
+	orderList: document.getElementById("orderList"),
+	orderCloseX: document.getElementById("orderCloseX"),
+	orderSaveButton: document.getElementById("orderSaveButton"),
+	orderCancelButton: document.getElementById("orderCancelButton"),
 };
 
 // =====================================================================
@@ -81,6 +100,18 @@ async function init() {
 		});
 	});
 
+	// 最初の並び順(保管場所)の矢印を見出しに出しておく
+	el.sortableHeaders.forEach(h => {
+		if (h.dataset.sort === currentSort.key) h.setAttribute("aria-sort", "ascending");
+	});
+	el.openOrderButton.addEventListener("click", openOrder);
+	el.orderCloseX.addEventListener("click", closeOrder);
+	el.orderCancelButton.addEventListener("click", closeOrder);
+	el.orderSaveButton.addEventListener("click", saveOrder);
+	el.orderOverlay.addEventListener("click", e => {
+		if (e.target === el.orderOverlay) closeOrder();
+	});
+
 	el.openAddButton.addEventListener("click", () => openForm(null));
 	el.emptyAddButton.addEventListener("click", () => openForm(null));
 	el.closeXButton.addEventListener("click", closeForm);
@@ -94,6 +125,7 @@ async function init() {
 	// Escapeキーでモーダルを閉じる
 	document.addEventListener("keydown", e => {
 		if (e.key === "Escape" && !el.formOverlay.hidden) closeForm();
+		if (e.key === "Escape" && !el.orderOverlay.hidden) closeOrder();   // ← 追加
 	});
 
 	try {
@@ -116,6 +148,9 @@ async function loadMeta() {
 	for (const store of meta.stores) {
 		el.storeOptions.appendChild(new Option(store));
 	}
+
+	locationOrder = meta.locations; // 「玄関に近い順」で表示させるために追加
+
 	for (const loc of meta.locations) {
 		el.locationOptions.appendChild(new Option(loc));
 	}
@@ -137,7 +172,15 @@ async function reloadList() {
 
 /** 手元にある lastItems に対して、検索 → 並び替え → 描画 を行う(サーバーには聞き直さない) */
 function renderFromState() {
-	const filtered = currentSearch ? lastItems.filter(matchesSearch) : lastItems;
+	//const filtered = currentSearch ? lastItems.filter(matchesSearch) : lastItems;←この部分を以下の文に変更
+	const searched = currentSearch ? lastItems.filter(matchesSearch) : lastItems;
+
+	// 保管場所タブ: 件数を数えてタブを作り、選択中の場所だけに絞る
+	const counts = countByLocation(searched);
+	if (currentLocation && !counts.has(currentLocation)) currentLocation = ""; // 空になった場所は「すべて」に戻す
+	renderTabs(counts, searched.length);
+	const filtered = currentLocation ? searched.filter(it => locOf(it) === currentLocation) : searched;
+
 	const sorted = sortItems(filtered, currentSort);
 	renderSummary(filtered);
 	renderTable(sorted);
@@ -175,9 +218,13 @@ function sortItems(items, sort) {
 		switch (sort.key) {
 			case "name":
 			case "category":
-			case "location":
+			//case "location":← 玄関に近い順にソートするため、"location" を削除
 			case "store":
 				cmp = a[sort.key].localeCompare(b[sort.key], "ja");
+				break;
+			case "location":                   // ← 追加
+				// 五十音順ではなく、保管場所の並び順(玄関に近い順)で比べる
+				cmp = locationRank(a.location) - locationRank(b.location);
 				break;
 			case "price":
 				cmp = a.price - b.price;
@@ -218,7 +265,16 @@ function renderTable(items) {
 	el.itemsBody.innerHTML = "";
 	el.emptyMessage.hidden = items.length > 0;
 
+	// 「保管場所」順で、タブが「すべて」のときは、場所ごとの見出し行を挟む
+	const grouped = currentSort.key === "location" && currentLocation === "";
+	const counts = countByLocation(items);
+	let lastLoc = null;
+
 	for (const item of items) {
+		if (grouped && locOf(item) !== lastLoc) {
+			lastLoc = locOf(item);
+			el.itemsBody.appendChild(groupRow(lastLoc, counts.get(lastLoc)));
+		}
 		const tr = document.createElement("tr");
 		tr.className = rowClass(item);
 
@@ -234,6 +290,125 @@ function renderTable(items) {
 
 		el.itemsBody.appendChild(tr);
 	}
+}
+// ---- 保管場所タブ・並び順まわり ----
+
+/** 所持品の保管場所名。空なら「(未設定)」として扱う */
+function locOf(item) {
+	return item.location || NO_LOCATION;
+}
+
+/** 保管場所の並び順での位置。未登録の場所 → 空欄 の順に最後へ回す */
+function locationRank(name) {
+	const i = locationOrder.indexOf(name);
+	if (i >= 0) return i;
+	return name ? locationOrder.length : locationOrder.length + 1;
+}
+
+/** 保管場所ごとの件数。並び順どおり(順番未登録・未設定は最後)の Map で返す */
+function countByLocation(items) {
+	const raw = new Map();
+	for (const it of items) raw.set(locOf(it), (raw.get(locOf(it)) ?? 0) + 1);
+	const ordered = new Map();
+	for (const name of locationOrder) if (raw.has(name)) ordered.set(name, raw.get(name));
+	for (const [name, n] of raw) if (!ordered.has(name)) ordered.set(name, n);
+	return ordered;
+}
+
+function renderTabs(counts, total) {
+	el.locationTabs.innerHTML = "";
+	el.locationTabs.appendChild(tabButton("すべて", total, ""));
+	for (const [name, n] of counts) {
+		el.locationTabs.appendChild(tabButton(name, n, name));
+	}
+}
+
+function tabButton(label, count, value) {
+	const b = document.createElement("button");
+	const active = currentLocation === value;
+	b.type = "button";
+	b.className = "tab" + (active ? " active" : "");
+	b.setAttribute("role", "tab");
+	b.setAttribute("aria-selected", String(active));
+	b.innerHTML = `${escapeHtml(label)}<span class="tab-count">${count}</span>`;
+	b.addEventListener("click", () => { currentLocation = value; renderFromState(); });
+	return b;
+}
+
+/** 一覧の中の「玄関 3」のような場所の見出し行 */
+function groupRow(name, count) {
+	const tr = document.createElement("tr");
+	tr.className = "group-row";
+	const td = document.createElement("td");
+	td.colSpan = 9;
+	td.innerHTML = `${escapeHtml(name)}<span class="tab-count">${count}</span>`;
+	tr.appendChild(td);
+	return tr;
+}
+
+// ---- 場所の並び替え(モーダル) ----
+
+async function openOrder() {
+	try {
+		const data = await fetchJson("/api/locations");
+		orderDraft = data.locations;
+	} catch (err) {
+		showToast(err.message, true);
+		return;
+	}
+	renderOrderList();
+	el.orderOverlay.hidden = false;
+}
+
+function closeOrder() {
+	el.orderOverlay.hidden = true;
+}
+
+function renderOrderList() {
+	const used = countByLocation(lastItems);
+	el.orderList.innerHTML = "";
+	orderDraft.forEach((name, i) => {
+		const li = document.createElement("li");
+		li.className = "order-item";
+		li.innerHTML = `<span class="order-num">${i + 1}</span>`
+			+ `<span class="order-name">${escapeHtml(name)}</span>`
+			+ `<span class="order-count">${used.get(name) ?? 0}点</span>`;
+		const up = iconButton("up", ICONS.up, "上へ", () => moveLocation(i, -1));
+		const down = iconButton("down", ICONS.down, "下へ", () => moveLocation(i, 1));
+		up.disabled = i === 0;
+		down.disabled = i === orderDraft.length - 1;
+		li.append(up, down);
+		el.orderList.appendChild(li);
+	});
+}
+
+function moveLocation(i, delta) {
+	const j = i + delta;
+	if (j < 0 || j >= orderDraft.length) return;
+	[orderDraft[i], orderDraft[j]] = [orderDraft[j], orderDraft[i]];
+	renderOrderList();
+}
+
+async function saveOrder() {
+	try {
+		const res = await fetch("/api/locations", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ order: orderDraft.join("\n") }),
+		});
+		if (!res.ok) {
+			const data = await res.json().catch(() => ({}));
+			showToast(data.error ?? "保存に失敗しました", true);
+			return;
+		}
+	} catch (err) {
+		showToast("サーバーに接続できませんでした", true);
+		return;
+	}
+	locationOrder = orderDraft.slice();
+	closeOrder();
+	showToast("場所の並び順を保存しました");
+	renderFromState();
 }
 
 /** 保証が近い・保証切れ・手放し済みで行の色を変えるためのクラス名を決める(手放し済みが最優先) */
@@ -527,6 +702,8 @@ const ICONS = {
 	check: '<svg viewBox="0 0 24 24" fill="none"><path d="M5 13l4.5 4.5L19 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 	restore: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 10h9a5 5 0 1 1 0 10h-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M8 5 4 10l4 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 	trash: '<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0 1 12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+	up: '<svg viewBox="0 0 24 24" fill="none"><path d="m6 15 6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+	down: '<svg viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 // ページの読み込みが終わったら開始する

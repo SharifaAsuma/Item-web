@@ -71,6 +71,13 @@ public class JdbcItemRepository implements ItemRepository {
       }
 
       checkTableAndColumns(conn);
+
+      // 保管場所の並び順を覚えておくテーブル(無ければ作る)
+      try (Statement st = conn.createStatement()) {
+        st.execute("CREATE TABLE IF NOT EXISTS item_location ("
+            + "location_name VARCHAR(100) NOT NULL PRIMARY KEY, "
+            + "sort_order INT NOT NULL DEFAULT 0)");
+      }
     }
   }
 
@@ -189,21 +196,27 @@ public class JdbcItemRepository implements ItemRepository {
         + q(c.colPurchase) + ", " + q(c.colPrice) + ", " + q(c.colStore) + ", " + q(c.colWarranty)
         + ", " + q(c.colNote) + ", " + q(c.colDispose);
 
+    // 「使い切った日」を編集するために、以下の部分を変更
+    // 【変更前】
+    // VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
     if (c.idAutoIncrement) {
-      return "INSERT INTO " + q(c.table) + " (" + cols + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)";
+      return "INSERT INTO " + q(c.table) + " (" + cols + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
     }
     // ID列が自動採番でない場合: 「いまの最大ID + 1」を新しいIDにして登録する
     return "INSERT INTO " + q(c.table) + " (" + q(c.colId) + ", " + cols + ") "
-        + "SELECT COALESCE(MAX(" + q(c.colId) + "), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?, NULL FROM "
+        + "SELECT COALESCE(MAX(" + q(c.colId) + "), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM "
         + q(c.table);
   }
 
+  // 「使い切った日」を編集するために、以下の部分を変更
+  // 【変更前】
+  // + q(c.colWarranty) + " = ?, " + q(c.colNote) + " = ? WHERE "
   /** 更新のSQL。手放した日はここでは変更しない(専用の dispose SQLで扱う)。? は8個 + 最後に WHERE の ID */
   private String updateSql() {
     return "UPDATE " + q(c.table) + " SET " + q(c.colName) + " = ?, " + q(c.colCategory) + " = ?, "
         + q(c.colLocation) + " = ?, " + q(c.colPurchase) + " = ?, " + q(c.colPrice) + " = ?, "
-        + q(c.colStore) + " = ?, " + q(c.colWarranty) + " = ?, " + q(c.colNote) + " = ? WHERE "
-        + q(c.colId) + " = ?";
+        + q(c.colStore) + " = ?, " + q(c.colWarranty) + " = ?, " + q(c.colNote) + " = ?, "
+        + q(c.colDispose) + " = ? WHERE " + q(c.colId) + " = ?";
   }
 
   private String deleteSql() {
@@ -260,11 +273,12 @@ public class JdbcItemRepository implements ItemRepository {
     }
   }
 
+  // 「使い切った日」を編集するために、ps.setInt(9, item.getId());→ps.setInt(10, item.getId());に変更
   @Override
   public int update(Item item) throws SQLException {
     try (Connection conn = open(); PreparedStatement ps = conn.prepareStatement(updateSql())) {
       bind(conn, ps, item);
-      ps.setInt(9, item.getId());// 9番目の ? は WHERE の id
+      ps.setInt(10, item.getId());// 9番目の ? は WHERE の id
       return ps.executeUpdate();
     }
   }
@@ -305,6 +319,47 @@ public class JdbcItemRepository implements ItemRepository {
     return distinctValues(c.colLocation);
   }
 
+  @Override
+  public List<String> findLocationOrder() throws SQLException {
+    List<String> list = new ArrayList<>();
+    String sql = "SELECT location_name FROM item_location ORDER BY sort_order, location_name";
+    try (Connection conn = open();
+        Statement st = conn.createStatement();
+        ResultSet rs = st.executeQuery(sql)) {
+      while (rs.next()) {
+        list.add(rs.getString(1));
+      }
+    }
+    return list;
+  }
+
+  @Override
+  public void saveLocationOrder(List<String> names) throws SQLException {
+    try (Connection conn = open()) {
+      conn.setAutoCommit(false); // 「全部消して入れ直す」を途中で止まらないよう1まとまりにする
+      try {
+        try (Statement st = conn.createStatement()) {
+          st.executeUpdate("DELETE FROM item_location");
+        }
+        String sql = "INSERT INTO item_location (location_name, sort_order) VALUES (?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+          int order = 10;
+          for (String name : names) {
+            ps.setString(1, name);
+            ps.setInt(2, order);
+            ps.addBatch();
+            order += 10;
+          }
+          ps.executeBatch();
+        }
+        conn.commit();
+      } catch (SQLException e) {
+        conn.rollback();
+        throw e;
+      }
+    }
+  }
+
   /** 指定した列の、空でない値を重複なしで返す(入力候補用) */
   private List<String> distinctValues(String column) throws SQLException {
     String sql = "SELECT DISTINCT " + q(column) + " FROM " + q(c.table) + " WHERE " + q(column)
@@ -319,6 +374,7 @@ public class JdbcItemRepository implements ItemRepository {
     }
     return list;
   }
+
 
   // =====================================================================
   // 補助メソッド
@@ -353,6 +409,7 @@ public class JdbcItemRepository implements ItemRepository {
     ps.setString(6, item.getStore());
     setDate(ps, 7, item.getWarrantyDate(), sqlite);
     ps.setString(8, item.getNote());
+    setDate(ps, 9, item.getDisposalDate(), sqlite); // ← 「使い切った日」を編集するために、後に追加
   }
 
   private void setDate(PreparedStatement ps, int index, LocalDate date, boolean sqlite)
@@ -416,4 +473,5 @@ public class JdbcItemRepository implements ItemRepository {
   private String nullToEmpty(String s) {
     return s == null ? "" : s;
   }
+
 }
